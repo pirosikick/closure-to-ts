@@ -48,7 +48,7 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }) {
 
       const matchedNs = getLongest(matchedNsList);
 
-      if (ns === matchedNs) {
+      if (ns === matchedNs && provideNamespaces.length === 1) {
         path.parentPath.replace(j.exportDefaultDeclaration(node.right));
         return;
       }

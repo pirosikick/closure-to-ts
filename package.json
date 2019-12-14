@@ -1,0 +1,26 @@
+{
+  "name": "closure-to-ts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/pirosikick/closure-to-ts.git"
+  },
+  "keywords": [],
+  "author": "Hiroyuki ANAI <pirosikick@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/pirosikick/closure-to-ts/issues"
+  },
+  "homepage": "https://github.com/pirosikick/closure-to-ts#readme",
+  "devDependencies": {
+    "@types/jest": "^24.0.23",
+    "@types/jscodeshift": "^0.6.3",
+    "jest": "^24.9.0",
+    "jscodeshift": "^0.6.4"
+  }
+}

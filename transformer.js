@@ -1,4 +1,5 @@
 const nodeToNamespace = require("./lib/nodeToNamespace");
+const getLongest = require("./lib/getLongest");
 
 /**
  *
@@ -39,9 +40,16 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }) {
 
     if (j.MemberExpression.check(node.left)) {
       const ns = nodeToNamespace(node.left);
-      const matchedNs = provideNamespaces.filter(n => ns.indexOf(n) === 0);
+      const matchedNsList = provideNamespaces.filter(n => ns.indexOf(n) === 0);
 
-      if (!ns || matchedNs.length === 0) {
+      if (!ns || matchedNsList.length === 0) {
+        return;
+      }
+
+      const matchedNs = getLongest(matchedNsList);
+
+      if (ns === matchedNs) {
+        path.parentPath.replace(j.exportDefaultDeclaration(node.right));
         return;
       }
 

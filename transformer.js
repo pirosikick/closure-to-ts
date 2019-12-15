@@ -105,19 +105,19 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
 
       const matchedNs = getLongest(matchedNsList);
 
-      if (ns === matchedNs && provideNamespaces.length === 1) {
-        path.parentPath.replace(j.exportDefaultDeclaration(node.right));
-        return;
-      }
+      const newNode =
+        ns === matchedNs && provideNamespaces.length === 1
+          ? j.exportDefaultDeclaration(node.right)
+          : j.exportNamedDeclaration(
+              j.variableDeclaration("const", [
+                j.variableDeclarator(node.left.property, node.right)
+              ])
+            );
+
+      newNode.comments = path.parentPath.node.comments;
 
       // Replace ExpressionStatement, which is parent of AssignmentExpression
-      path.parentPath.replace(
-        j.exportNamedDeclaration(
-          j.variableDeclaration("const", [
-            j.variableDeclarator(node.left.property, node.right)
-          ])
-        )
-      );
+      path.parentPath.replace(newNode);
     }
   });
 

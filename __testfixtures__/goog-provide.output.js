@@ -1,8 +1,13 @@
 goog.provide("a.b.c");
 
-export const someFunction = () => {
+/**
+ * @param {string} arg The string
+ * @return {boolean}
+ */
+export const someFunction = (arg) => {
   const a = {};
   a.b = () => {};
+  return true;
 };
 
 // ignore because 'd.e.f' is not provided.

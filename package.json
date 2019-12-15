@@ -22,5 +22,8 @@
     "@types/jscodeshift": "^0.6.3",
     "jest": "^24.9.0",
     "jscodeshift": "^0.6.4"
+  },
+  "dependencies": {
+    "google-closure-deps": "^20191111.0.0"
   }
 }

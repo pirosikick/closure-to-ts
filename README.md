@@ -1,3 +1,3 @@
 # closure-to-ts
 
-![](https://github.com/pirosikick/closure-to-ts/workflows/.github/workflows/run-tests.yml/badge.svg)
+![](https://github.com/pirosikick/closure-to-ts/workflows/Run%20tests/badge.svg)

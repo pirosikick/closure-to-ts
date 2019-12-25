@@ -1,8 +1,11 @@
+const path_ = require("path");
 const nodeToNs = require("./lib/nodeToNs");
 const getLongest = require("./lib/getLongest");
 const loadDeps = require("./lib/loadDeps");
 const nsToCamel = require("./lib/nsToCamel");
 const nsToNode = require("./lib/nsToNode");
+const findDep = require("./lib/findDep");
+const importPath = require("./lib/importPath");
 
 /**
  *
@@ -13,10 +16,12 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
   const root = j(fileInfo.source);
   const provideNamespaces = [];
 
-  let dependencies = [];
-  if (options.depsPath && options.closurePath) {
+  let dependencies;
+  let closurePath;
+  if (options.depsPath) {
     const result = loadDeps(options.depsPath);
     dependencies = result.dependencies;
+    closurePath = options.closurePath || path_.dirname(options.depsPath);
   }
 
   // goog.provide
@@ -34,8 +39,7 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
       }
     });
 
-  if (provideNamespaces.length > 0) {
-  }
+  const provideNs = provideNamespaces[0];
 
   // goog.require
   root
@@ -56,7 +60,10 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
       path.parentPath.replace(
         j.importDeclaration(
           [j.importNamespaceSpecifier(j.identifier(nsCamel))],
-          j.stringLiteral(`FIXME/${ns}`)
+          j.stringLiteral(
+            importPath(dependencies, provideNs, ns, closurePath) ||
+              `FIXME/${ns}`
+          )
         )
       );
 

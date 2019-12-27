@@ -13,3 +13,4 @@ defineTest(
   { depsPath: DEPS },
   "goog-require-with-deps"
 );
+defineTest(__dirname, "transformer", null, "jsdoc-to-ts");

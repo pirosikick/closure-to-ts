@@ -1,3 +1,5 @@
+module.exports = "typescript";
+
 const path_ = require("path");
 const nodeToNs = require("./lib/nodeToNs");
 const getLongest = require("./lib/getLongest");
@@ -6,6 +8,7 @@ const nsToCamel = require("./lib/nsToCamel");
 const nsToNode = require("./lib/nsToNode");
 const findDep = require("./lib/findDep");
 const importPath = require("./lib/importPath");
+const parseComment = require("./lib/parseComment");
 
 /**
  *
@@ -125,6 +128,48 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
 
       // Replace ExpressionStatement, which is parent of AssignmentExpression
       path.parentPath.replace(newNode);
+    }
+  });
+
+  root.find(j.Comment).forEach(path => {
+    const { node } = path;
+    const lastComment = path.node.comments[path.node.comments.length - 1];
+    if (!j.CommentBlock.check(lastComment)) {
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = parseComment(lastComment.value);
+    } catch (e) {
+      console.error(lastComment.value);
+      return;
+    }
+
+    if (j.ExportNamedDeclaration.check(node)) {
+      if (
+        j.VariableDeclaration.check(node.declaration) &&
+        j.VariableDeclarator.check(node.declaration.declarations[0])
+      ) {
+        const variableDecralator = node.declaration.declarations[0];
+
+        if (j.FunctionExpression.check(variableDecralator.init)) {
+          const functionDeclaration = variableDecralator.init;
+
+          if (parsed.return) {
+            functionDeclaration.returnType = parsed.return;
+          }
+
+          if (parsed.params.length) {
+            functionDeclaration.params.forEach(param => {
+              const p = parsed.params.find(p => p.name === param.name);
+              if (p) {
+                param.typeAnnotation = p.annotation;
+              }
+            });
+          }
+        }
+      }
     }
   });
 

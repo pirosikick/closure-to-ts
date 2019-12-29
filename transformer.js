@@ -153,20 +153,24 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
       ) {
         const variableDecralator = node.declaration.declarations[0];
 
+        // export const xxx = function (...) { ... }
         if (j.FunctionExpression.check(variableDecralator.init)) {
-          const functionDeclaration = variableDecralator.init;
+          addTypeAnnotationToFunctionExpression(
+            j,
+            variableDecralator.init,
+            parsed
+          );
+          return;
+        }
 
-          if (parsed.return) {
-            functionDeclaration.returnType = parsed.return;
+        // export const xxx = (...) ? function (...) { ... } : function (...) { ... }
+        if (j.ConditionalExpression.check(variableDecralator.init)) {
+          const init = variableDecralator.init;
+          if (j.FunctionExpression.check(init.consequent)) {
+            addTypeAnnotationToFunctionExpression(j, init.consequent, parsed);
           }
-
-          if (parsed.params.length) {
-            functionDeclaration.params.forEach(param => {
-              const p = parsed.params.find(p => p.name === param.name);
-              if (p) {
-                param.typeAnnotation = p.annotation;
-              }
-            });
+          if (j.FunctionExpression.check(init.alternate)) {
+            addTypeAnnotationToFunctionExpression(j, init.alternate, parsed);
           }
         }
       }
@@ -174,4 +178,35 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
   });
 
   return root.toSource();
+};
+
+const addTypeAnnotationToFunctionExpression = (
+  j,
+  functionExpression,
+  parsed
+) => {
+  if (parsed.return) {
+    functionExpression.returnType = parsed.return;
+  }
+
+  if (parsed.params.length) {
+    functionExpression.params = functionExpression.params.map(param => {
+      const p = parsed.params.find(p => p.name === param.name);
+      if (!p) {
+        return param;
+      }
+
+      if (p.rest) {
+        const newParam = j.restElement(param);
+        newParam.typeAnnotation = p.annotation;
+        return newParam;
+      }
+
+      return {
+        ...param,
+        typeAnnotation: p.annotation,
+        optional: p.optional
+      };
+    });
+  }
 };

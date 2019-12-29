@@ -10,3 +10,18 @@ goog.provide('goog.string.internal');
 goog.string.internal.startsWith = function(str, prefix) {
   return str.lastIndexOf(prefix, 0) == 0;
 };
+
+/**
+ * Finds the characters to the right of the last instance of any separator
+ *
+ * This function is similar to goog.string.path.baseName, except it can take a
+ * list of characters to split the string on. It will return the rightmost
+ * grouping of characters to the right of any separator as a left-to-right
+ * oriented string.
+ *
+ * @see goog.string.path.baseName
+ * @param {string} str The string
+ * @param {string|!Array<string>} separators A list of separator characters
+ * @return {string} The last part of the string with respect to the separators
+ */
+goog.string.internal.lastComponent = function(str, separators) {}

@@ -1,4 +1,4 @@
-goog.provide("a.b.c");
+// goog.provide("a.b.c");
 
 /**
  * @param {string} arg The string

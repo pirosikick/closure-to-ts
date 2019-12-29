@@ -1,4 +1,4 @@
-goog.provide("app.a");
+// goog.provide("app.a");
 
 import * as appB from "./b";
 

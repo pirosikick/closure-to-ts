@@ -1,4 +1,4 @@
-goog.provide('goog.string.internal');
+// goog.provide("goog.string.internal");
 
 /**
  * Fast prefix-checker.

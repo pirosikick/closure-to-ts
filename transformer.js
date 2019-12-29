@@ -40,6 +40,10 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
       if (arg0 && typeof arg0.value === "string") {
         provideNamespaces.push(arg0.value);
       }
+
+      path.replace(
+        j.commentLine(` goog.provide("${arg0.value}")`, false, false)
+      );
     });
 
   const provideNs = provideNamespaces[0];
@@ -133,6 +137,10 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
 
   root.find(j.Comment).forEach(path => {
     const { node } = path;
+    if (!Array.isArray(path.node.comments)) {
+      return;
+    }
+
     const lastComment = path.node.comments[path.node.comments.length - 1];
     if (!j.CommentBlock.check(lastComment)) {
       return;

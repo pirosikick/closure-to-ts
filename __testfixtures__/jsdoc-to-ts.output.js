@@ -40,7 +40,7 @@ export const lastComponent = function(str: string, separators: string | Array<st
  *     it will be casted to one.
  * @return {string} The concatenation of `var_args`.
  */
-export const buildString = function(...var_args: unknown[]): string {
+export const buildString = function(...var_args: any[]): string {
   return Array.prototype.join.call(arguments, '');
 };
 

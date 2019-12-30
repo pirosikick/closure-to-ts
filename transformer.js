@@ -125,31 +125,32 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
     }
 
     const nodeNs = nodeToNs(path.node);
+
+    const ns = requireNs.find(
+      n => n === nodeNs || nodeNs.indexOf(`${n}.`) === 0
+    );
+
+    if (ns) {
+      if (ns === nodeNs) {
+        path.replace(j.identifier(nsCamel));
+      }
+
+      if (nodeNs.indexOf(`${ns}.`) === 0) {
+        // aaa.bbb.ccc.hello => aaaBbbCcc.hello
+        const nsCamel = nsToCamel(ns);
+        const afterNs = [nsCamel, nodeNs.slice(`${ns}.`.length)].join(".");
+        path.replace(nsToNode(afterNs));
+      }
+
+      return;
+    }
+
     if (nodeNs.indexOf(`${provideNs}.`) === 0) {
       // goog.provide('aaa.bbb.ccc')
       // aaa.bbb.ccc.hello => hello
       const afterNs = nodeNs.slice(`${provideNs}.`.length);
       path.replace(nsToNode(afterNs));
       return;
-    }
-
-    const ns = requireNs.find(
-      n => n === nodeNs || nodeNs.indexOf(`${n}.`) === 0
-    );
-    if (!ns) {
-      return;
-    }
-
-    if (ns === nodeNs) {
-      path.replace(j.identifier(nsCamel));
-      return;
-    }
-
-    if (nodeNs.indexOf(`${ns}.`) === 0) {
-      // aaa.bbb.ccc.hello => aaaBbbCcc.hello
-      const nsCamel = nsToCamel(ns);
-      const afterNs = [nsCamel, nodeNs.slice(`${ns}.`.length)].join(".");
-      path.replace(nsToNode(afterNs));
     }
   });
 

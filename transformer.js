@@ -47,6 +47,7 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
     });
 
   const provideNs = provideNamespaces[0];
+  const requireNs = [];
 
   // goog.require
   root
@@ -64,6 +65,8 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
       const ns = arg0.value;
       const nsCamel = nsToCamel(ns);
 
+      requireNs.push(ns);
+
       path.parentPath.replace(
         j.importDeclaration(
           [j.importNamespaceSpecifier(j.identifier(nsCamel))],
@@ -73,26 +76,6 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
           )
         )
       );
-
-      // aaa.bbb.ccc => aaaBbbCcc
-      root.find(j.MemberExpression).forEach(path => {
-        if (j.MemberExpression.check(path.parentPath.node)) {
-          return;
-        }
-
-        const nodeNs = nodeToNs(path.node);
-
-        if (ns === nodeNs) {
-          path.replace(j.identifier(nsCamel));
-          return;
-        }
-
-        if (nodeNs.indexOf(`${ns}.`) === 0) {
-          // aaa.bbb.ccc.hello => aaaBbbCcc.hello
-          const afterNs = [nsCamel, nodeNs.slice(`${ns}.`.length)].join(".");
-          path.replace(nsToNode(afterNs));
-        }
-      });
     });
 
   root.find(j.AssignmentExpression).forEach(path => {
@@ -132,6 +115,41 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
 
       // Replace ExpressionStatement, which is parent of AssignmentExpression
       path.parentPath.replace(newNode);
+    }
+  });
+
+  // aaa.bbb.ccc => aaaBbbCcc
+  root.find(j.MemberExpression).forEach(path => {
+    if (j.MemberExpression.check(path.parentPath.node)) {
+      return;
+    }
+
+    const nodeNs = nodeToNs(path.node);
+    if (nodeNs.indexOf(`${provideNs}.`) === 0) {
+      // goog.provide('aaa.bbb.ccc')
+      // aaa.bbb.ccc.hello => hello
+      const afterNs = nodeNs.slice(`${provideNs}.`.length);
+      path.replace(nsToNode(afterNs));
+      return;
+    }
+
+    const ns = requireNs.find(
+      n => n === nodeNs || nodeNs.indexOf(`${n}.`) === 0
+    );
+    if (!ns) {
+      return;
+    }
+
+    if (ns === nodeNs) {
+      path.replace(j.identifier(nsCamel));
+      return;
+    }
+
+    if (nodeNs.indexOf(`${ns}.`) === 0) {
+      // aaa.bbb.ccc.hello => aaaBbbCcc.hello
+      const nsCamel = nsToCamel(ns);
+      const afterNs = [nsCamel, nodeNs.slice(`${ns}.`.length)].join(".");
+      path.replace(nsToNode(afterNs));
     }
   });
 

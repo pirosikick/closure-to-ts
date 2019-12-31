@@ -14,3 +14,4 @@ defineTest(
   "goog-require-with-deps"
 );
 defineTest(__dirname, "transformer", null, "jsdoc-to-ts");
+defineTest(__dirname, "transformer", null, "goog-provide-and-require");

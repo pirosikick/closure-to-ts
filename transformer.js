@@ -130,7 +130,7 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
       n => n === nodeNs || nodeNs.indexOf(`${n}.`) === 0
     );
 
-    if (ns) {
+    if (ns && provideNs.indexOf(ns) !== 0) {
       if (ns === nodeNs) {
         path.replace(j.identifier(nsCamel));
       }

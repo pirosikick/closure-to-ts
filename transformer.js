@@ -30,6 +30,9 @@ module.exports = function transformer(fileInfo, _, options) {
     closurePath = options.closurePath || path_.dirname(options.depsPath);
   }
 
+  const renameMap = new Map();
+  const classMap = new Map();
+
   // goog.provide
   root
     .find(j.CallExpression, {
@@ -40,19 +43,27 @@ module.exports = function transformer(fileInfo, _, options) {
     })
     .forEach(path => {
       const [arg0] = path.node.arguments;
-      if (arg0 && typeof arg0.value === "string") {
-        provideNamespaces.push(arg0.value);
+      if (!(arg0 && typeof arg0.value === "string")) {
+        return;
+      }
+      const provideNs = arg0.value;
+      const lastChunk = provideNs.split(".").pop();
+
+      if (/^[A-Z]/.test(lastChunk)) {
+        // goog.provide('a.b.c.SomeClass')
+        renameMap.set(provideNs, lastChunk);
+      } else {
+        // goog.provide('a.b.c')
+        renameMap.set(provideNs, "");
       }
 
+      provideNamespaces.push(provideNs);
       path.replace(
-        j.commentLine(` goog.provide("${arg0.value}")`, false, false)
+        j.commentLine(` goog.provide("${provideNs}")`, false, false)
       );
     });
 
   const provideNs = provideNamespaces[0];
-  const requireNs = [];
-  const requireMap = new Map();
-  const classMap = new Map();
 
   // goog.require
   root
@@ -69,9 +80,6 @@ module.exports = function transformer(fileInfo, _, options) {
       }
       const ns = arg0.value;
       const lastChunk = ns.split(".").pop();
-      const nsCamel = nsToCamel(ns);
-
-      requireNs.push(ns);
 
       const from = j.stringLiteral(
         importPath(dependencies, provideNs, ns, closurePath) || `FIXME/${ns}`
@@ -81,11 +89,12 @@ module.exports = function transformer(fileInfo, _, options) {
       if (/^[A-Z]/.test(lastChunk)) {
         // goog.require('a.b.SomeClass') => import { SomeClass } from 'xxx';
         specifiers = [j.importSpecifier(j.identifier(lastChunk))];
-        requireMap.set(ns, lastChunk);
+        renameMap.set(ns, lastChunk);
       } else {
         // goog.require('a.b.c') => import * as aBC from 'xxx';
+        const nsCamel = nsToCamel(ns);
         specifiers = [j.importNamespaceSpecifier(j.identifier(nsCamel))];
-        requireMap.set(ns, nsCamel);
+        renameMap.set(ns, nsCamel);
       }
 
       path.parentPath.replace(j.importDeclaration(specifiers, from));
@@ -143,6 +152,7 @@ module.exports = function transformer(fileInfo, _, options) {
 
         node.right = classDeclaration;
         classMap.set(nodeToNs(node.left), classDeclaration);
+        renameMap.set(nodeToNs(node.left), classDeclaration.id.name);
         return;
       }
 
@@ -236,6 +246,11 @@ module.exports = function transformer(fileInfo, _, options) {
     }
   });
 
+  // sort by key.length in desc
+  const renameEntries = Array.from(renameMap.entries()).sort(
+    (a, b) => b[0].length - a[0].length
+  );
+
   // aaa.bbb.ccc => aaaBbbCcc
   root.find(j.MemberExpression).forEach(path => {
     if (j.MemberExpression.check(path.parentPath.node)) {
@@ -244,30 +259,21 @@ module.exports = function transformer(fileInfo, _, options) {
 
     const nodeNs = nodeToNs(path.node);
 
-    const ns = requireNs.find(
-      n => n === nodeNs || nodeNs.indexOf(`${n}.`) === 0
+    const renameEntry = renameEntries.find(
+      ([n]) => n === nodeNs || nodeNs.indexOf(`${n}.`) === 0
     );
 
-    if (ns && provideNs.indexOf(ns) !== 0) {
-      if (ns === nodeNs) {
-        path.replace(j.identifier(nsCamel));
-      }
+    if (renameEntry) {
+      const [fromNs, toIdName] = renameEntry;
 
-      if (nodeNs.indexOf(`${ns}.`) === 0) {
-        // aaa.bbb.ccc.hello => aaaBbbCcc.hello
-        const nsCamel = nsToCamel(ns);
-        const afterNs = [nsCamel, nodeNs.slice(`${ns}.`.length)].join(".");
+      if (nodeNs === fromNs) {
+        path.replace(j.identifier(toIdName));
+      } else {
+        const remain = nodeNs.slice(`${fromNs}.`.length);
+        const afterNs = toIdName ? [toIdName, remain].join(".") : remain;
         path.replace(nsToNode(afterNs));
       }
 
-      return;
-    }
-
-    if (nodeNs.indexOf(`${provideNs}.`) === 0) {
-      // goog.provide('aaa.bbb.ccc')
-      // aaa.bbb.ccc.hello => hello
-      const afterNs = nodeNs.slice(`${provideNs}.`.length);
-      path.replace(nsToNode(afterNs));
       return;
     }
   });

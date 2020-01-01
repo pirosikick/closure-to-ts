@@ -1,6 +1,7 @@
 module.exports = "typescript";
 
 const path_ = require("path");
+const j = require("jscodeshift");
 const nodeToNs = require("./lib/nodeToNs");
 const getLongest = require("./lib/getLongest");
 const loadDeps = require("./lib/loadDeps");
@@ -15,7 +16,7 @@ const parseComment = require("./lib/parseComment");
  * @param {import('jscodeshift').FileInfo} fileInfo
  * @param {import('jscodeshift').API} api
  */
-module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
+module.exports = function transformer(fileInfo, _, options) {
   const root = j(fileInfo.source);
   const provideNamespaces = [];
 
@@ -78,15 +79,70 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
       );
     });
 
-  root.find(j.AssignmentExpression).forEach(path => {
-    // ensure that path.node is defined at top-level scope
+  root.find(j.Comment).forEach(path => {
     if (
       !(
-        path.parentPath && // ExpressionStatement
-        path.parentPath.parentPath && // Program
-        j.Program.check(path.parentPath.parentPath.node)
+        j.CommentBlock.check(path.value) &&
+        path.value.leading &&
+        // ensure top-level NodePath
+        j.ExpressionStatement.check(path.node) &&
+        j.Program.check(path.parent.node)
       )
     ) {
+      return;
+    }
+
+    const comment = path.value;
+    const expressionStatement = path.node;
+    const node = expressionStatement.expression;
+
+    if (!j.AssignmentExpression.check(node)) {
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = parseComment(comment.value);
+    } catch (e) {
+      console.error(comment.value);
+      return;
+    }
+
+    const right = node.right;
+
+    // x.x.x = function (...) { ... }
+    if (j.FunctionExpression.check(right)) {
+      if (parsed.constructor) {
+        const constructor = j.classMethod(
+          "constructor",
+          j.identifier("constructor"),
+          addTypeAnnotationToParams(parsed, right.params),
+          right.body
+        );
+        node.right = j.classDeclaration(right.id, j.classBody([constructor]));
+        return;
+      }
+
+      addTypeAnnotationToFunctionExpression(right, parsed);
+      return;
+    }
+
+    // x.x.x = (...) ? function (...) { ... } : function (...) { ... }
+    if (j.ConditionalExpression.check(right)) {
+      if (j.FunctionExpression.check(right.consequent)) {
+        addTypeAnnotationToFunctionExpression(right.consequent, parsed);
+      }
+      if (j.FunctionExpression.check(right.alternate)) {
+        addTypeAnnotationToFunctionExpression(right.alternate, parsed);
+      }
+
+      return;
+    }
+  });
+
+  root.find(j.AssignmentExpression).forEach(path => {
+    // ensure that path.node is defined at top-level scope
+    if (!isTopLevelAssignmentExpression(path)) {
       return;
     }
 
@@ -153,87 +209,50 @@ module.exports = function transformer(fileInfo, { jscodeshift: j }, options) {
       return;
     }
   });
-
-  root.find(j.Comment).forEach(path => {
-    const { node } = path;
-    if (!Array.isArray(path.node.comments)) {
-      return;
-    }
-
-    const lastComment = path.node.comments[path.node.comments.length - 1];
-    if (!j.CommentBlock.check(lastComment)) {
-      return;
-    }
-
-    let parsed;
-    try {
-      parsed = parseComment(lastComment.value);
-    } catch (e) {
-      console.error(lastComment.value);
-      return;
-    }
-
-    if (j.ExportNamedDeclaration.check(node)) {
-      if (
-        j.VariableDeclaration.check(node.declaration) &&
-        j.VariableDeclarator.check(node.declaration.declarations[0])
-      ) {
-        const variableDecralator = node.declaration.declarations[0];
-
-        // export const xxx = function (...) { ... }
-        if (j.FunctionExpression.check(variableDecralator.init)) {
-          addTypeAnnotationToFunctionExpression(
-            j,
-            variableDecralator.init,
-            parsed
-          );
-          return;
-        }
-
-        // export const xxx = (...) ? function (...) { ... } : function (...) { ... }
-        if (j.ConditionalExpression.check(variableDecralator.init)) {
-          const init = variableDecralator.init;
-          if (j.FunctionExpression.check(init.consequent)) {
-            addTypeAnnotationToFunctionExpression(j, init.consequent, parsed);
-          }
-          if (j.FunctionExpression.check(init.alternate)) {
-            addTypeAnnotationToFunctionExpression(j, init.alternate, parsed);
-          }
-        }
-      }
-    }
-  });
-
   return root.toSource();
 };
 
-const addTypeAnnotationToFunctionExpression = (
-  j,
-  functionExpression,
-  parsed
-) => {
+const isTopLevelAssignmentExpression = path => {
+  return (
+    j.AssignmentExpression.check(path.node) &&
+    path.parentPath && // ExpressionStatement
+    path.parentPath.parentPath && // Program
+    j.Program.check(path.parentPath.parentPath.node)
+  );
+};
+
+const addTypeAnnotationToFunctionExpression = (functionExpression, parsed) => {
   if (parsed.return) {
     functionExpression.returnType = parsed.return;
   }
 
-  if (parsed.params.length) {
-    functionExpression.params = functionExpression.params.map(param => {
-      const p = parsed.params.find(p => p.name === param.name);
-      if (!p) {
-        return param;
-      }
+  functionExpression.params = addTypeAnnotationToParams(
+    parsed,
+    functionExpression.params
+  );
+};
 
-      if (p.rest) {
-        const newParam = j.restElement(param);
-        newParam.typeAnnotation = p.annotation;
-        return newParam;
-      }
-
-      return {
-        ...param,
-        typeAnnotation: p.annotation,
-        optional: p.optional
-      };
-    });
+const addTypeAnnotationToParams = (parsed, params) => {
+  if (!parsed.params.length) {
+    return params;
   }
+
+  return params.map(param => {
+    const p = parsed.params.find(p => p.name === param.name);
+    if (!p) {
+      return { ...param };
+    }
+
+    if (p.rest) {
+      const newParam = j.restElement(param);
+      newParam.typeAnnotation = p.annotation;
+      return newParam;
+    }
+
+    return {
+      ...param,
+      typeAnnotation: p.annotation,
+      optional: p.optional
+    };
+  });
 };

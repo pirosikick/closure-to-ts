@@ -110,7 +110,7 @@ module.exports = function transformer(fileInfo, _, options) {
       return;
     }
 
-    const right = node.right;
+    const { left, right } = node;
 
     // x.x.x = function (...) { ... }
     if (j.FunctionExpression.check(right)) {
@@ -119,6 +119,18 @@ module.exports = function transformer(fileInfo, _, options) {
         classDeclaration.leadingComments = [
           j.commentBlock(comment.value, true)
         ];
+
+        if (!classDeclaration.id) {
+          if (
+            j.MemberExpression.check(left) &&
+            j.Identifier.check(left.property)
+          ) {
+            classDeclaration.id = left.property;
+          } else if (j.Identifier(left)) {
+            classDeclaration.id = left;
+          }
+        }
+
         node.right = classDeclaration;
         return;
       }
@@ -156,16 +168,13 @@ module.exports = function transformer(fileInfo, _, options) {
         return;
       }
 
-      const matchedNs = getLongest(matchedNsList);
-
-      const newNode =
-        ns === matchedNs && provideNamespaces.length === 1
-          ? j.exportDefaultDeclaration(node.right)
-          : j.exportNamedDeclaration(
-              j.variableDeclaration("const", [
-                j.variableDeclarator(node.left.property, node.right)
-              ])
-            );
+      const newNode = j.ClassDeclaration.check(node.right)
+        ? j.exportNamedDeclaration(node.right)
+        : j.exportNamedDeclaration(
+            j.variableDeclaration("const", [
+              j.variableDeclarator(node.left.property, node.right)
+            ])
+          );
 
       newNode.comments = path.parentPath.node.comments;
 

@@ -51,6 +51,8 @@ module.exports = function transformer(fileInfo, _, options) {
 
   const provideNs = provideNamespaces[0];
   const requireNs = [];
+  const requireMap = new Map();
+  const classMap = new Map();
 
   // goog.require
   root
@@ -66,19 +68,27 @@ module.exports = function transformer(fileInfo, _, options) {
         return;
       }
       const ns = arg0.value;
+      const lastChunk = ns.split(".").pop();
       const nsCamel = nsToCamel(ns);
 
       requireNs.push(ns);
 
-      path.parentPath.replace(
-        j.importDeclaration(
-          [j.importNamespaceSpecifier(j.identifier(nsCamel))],
-          j.stringLiteral(
-            importPath(dependencies, provideNs, ns, closurePath) ||
-              `FIXME/${ns}`
-          )
-        )
+      const from = j.stringLiteral(
+        importPath(dependencies, provideNs, ns, closurePath) || `FIXME/${ns}`
       );
+
+      let specifiers;
+      if (/^[A-Z]/.test(lastChunk)) {
+        // goog.require('a.b.SomeClass') => import { SomeClass } from 'xxx';
+        specifiers = [j.importSpecifier(j.identifier(lastChunk))];
+        requireMap.set(ns, lastChunk);
+      } else {
+        // goog.require('a.b.c') => import * as aBC from 'xxx';
+        specifiers = [j.importNamespaceSpecifier(j.identifier(nsCamel))];
+        requireMap.set(ns, nsCamel);
+      }
+
+      path.parentPath.replace(j.importDeclaration(specifiers, from));
     });
 
   root.find(j.Comment).forEach(path => {
@@ -132,6 +142,7 @@ module.exports = function transformer(fileInfo, _, options) {
         }
 
         node.right = classDeclaration;
+        classMap.set(nodeToNs(node.left), classDeclaration);
         return;
       }
 
@@ -160,11 +171,53 @@ module.exports = function transformer(fileInfo, _, options) {
 
     const { node } = path;
 
+    // x.x.x = ...
     if (j.MemberExpression.check(node.left)) {
       const ns = nodeToNs(node.left);
-      const matchedNsList = provideNamespaces.filter(n => ns.indexOf(n) === 0);
+      if (!ns) {
+        return;
+      }
 
-      if (!ns || matchedNsList.length === 0) {
+      const classEntry = findMap(
+        classMap,
+        ([classNs]) => ns.indexOf(classNs) === 0 && ns !== classNs
+      );
+      if (classEntry) {
+        const [classNs, classDeclaration] = classEntry;
+        const chunks = ns.slice(classNs.length + 1).split(".");
+
+        if (!(chunks.length === 1 || chunks.length === 2)) {
+          return;
+        }
+
+        const key = j.identifier(chunks[chunks.length - 1]);
+        let item;
+        if (j.FunctionExpression.check(node.right)) {
+          item = j.classMethod(
+            "method",
+            key,
+            node.right.params,
+            node.right.body
+          );
+          item.returnType = node.right.returnType;
+        } else {
+          item = j.classProperty(key, node.right);
+        }
+
+        item.static = chunks.length === 1;
+        item.comments = path.parent.node.leadingComments;
+
+        classDeclaration.body = j.classBody([
+          ...classDeclaration.body.body,
+          item
+        ]);
+        path.prune();
+
+        return;
+      }
+
+      const matchedNsList = provideNamespaces.filter(n => ns.indexOf(n) === 0);
+      if (matchedNsList.length === 0) {
         return;
       }
 
@@ -239,4 +292,13 @@ const addTypeAnnotationToFunctionExpression = (functionExpression, parsed) => {
     functionExpression.params,
     parsed
   );
+};
+
+const findMap = (map, callback) => {
+  for (const entry of map.entries()) {
+    if (callback(entry)) {
+      return entry;
+    }
+  }
+  return undefined;
 };

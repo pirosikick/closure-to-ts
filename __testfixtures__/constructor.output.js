@@ -16,5 +16,23 @@ export class SomeClass {
     */
    this.str = str;
  }
+
+ /**
+  * Description
+  * 
+  * @param {string} a
+  * @param {string} b
+  */
+ methodA(a: string, b: string) {}
+
+ /**
+  * @const
+  */
+ propertyA = false;
+
+ /**
+  * @return {string}
+  */
+ static staticMethod(): string {}
 }
 

@@ -10,6 +10,8 @@ const nsToNode = require("./lib/nsToNode");
 const findDep = require("./lib/findDep");
 const importPath = require("./lib/importPath");
 const parseComment = require("./lib/parseComment");
+const addTypeAnnotationToParams = require("./lib/addTypeAnnotationToParams");
+const constructorToClass = require("./lib/constructorToClass");
 
 /**
  *
@@ -113,13 +115,11 @@ module.exports = function transformer(fileInfo, _, options) {
     // x.x.x = function (...) { ... }
     if (j.FunctionExpression.check(right)) {
       if (parsed.constructor) {
-        const constructor = j.classMethod(
-          "constructor",
-          j.identifier("constructor"),
-          addTypeAnnotationToParams(parsed, right.params),
-          right.body
-        );
-        node.right = j.classDeclaration(right.id, j.classBody([constructor]));
+        const classDeclaration = constructorToClass(right, parsed);
+        classDeclaration.leadingComments = [
+          j.commentBlock(comment.value, true)
+        ];
+        node.right = classDeclaration;
         return;
       }
 
@@ -227,32 +227,7 @@ const addTypeAnnotationToFunctionExpression = (functionExpression, parsed) => {
   }
 
   functionExpression.params = addTypeAnnotationToParams(
-    parsed,
-    functionExpression.params
+    functionExpression.params,
+    parsed
   );
-};
-
-const addTypeAnnotationToParams = (parsed, params) => {
-  if (!parsed.params.length) {
-    return params;
-  }
-
-  return params.map(param => {
-    const p = parsed.params.find(p => p.name === param.name);
-    if (!p) {
-      return { ...param };
-    }
-
-    if (p.rest) {
-      const newParam = j.restElement(param);
-      newParam.typeAnnotation = p.annotation;
-      return newParam;
-    }
-
-    return {
-      ...param,
-      typeAnnotation: p.annotation,
-      optional: p.optional
-    };
-  });
 };

@@ -12,6 +12,7 @@ const importPath = require("./lib/importPath");
 const parseComment = require("./lib/parseComment");
 const addTypeAnnotationToParams = require("./lib/addTypeAnnotationToParams");
 const constructorToClass = require("./lib/constructorToClass");
+const rename = require("./lib/rename");
 
 /**
  *
@@ -123,7 +124,7 @@ module.exports = function transformer(fileInfo, _, options) {
 
     let parsed;
     try {
-      parsed = parseComment(comment.value);
+      parsed = parseComment(comment.value, renameMap);
     } catch (e) {
       console.error(comment.value);
       return;
@@ -134,7 +135,7 @@ module.exports = function transformer(fileInfo, _, options) {
     // x.x.x = function (...) { ... }
     if (j.FunctionExpression.check(right)) {
       if (parsed.constructor) {
-        const classDeclaration = constructorToClass(right, parsed);
+        const classDeclaration = constructorToClass(right, parsed, renameMap);
         classDeclaration.leadingComments = [
           j.commentBlock(comment.value, true)
         ];
@@ -246,11 +247,6 @@ module.exports = function transformer(fileInfo, _, options) {
     }
   });
 
-  // sort by key.length in desc
-  const renameEntries = Array.from(renameMap.entries()).sort(
-    (a, b) => b[0].length - a[0].length
-  );
-
   // aaa.bbb.ccc => aaaBbbCcc
   root.find(j.MemberExpression).forEach(path => {
     if (j.MemberExpression.check(path.parentPath.node)) {
@@ -258,23 +254,10 @@ module.exports = function transformer(fileInfo, _, options) {
     }
 
     const nodeNs = nodeToNs(path.node);
+    const renameNodeNs = rename(renameMap, nodeNs);
 
-    const renameEntry = renameEntries.find(
-      ([n]) => n === nodeNs || nodeNs.indexOf(`${n}.`) === 0
-    );
-
-    if (renameEntry) {
-      const [fromNs, toIdName] = renameEntry;
-
-      if (nodeNs === fromNs) {
-        path.replace(j.identifier(toIdName));
-      } else {
-        const remain = nodeNs.slice(`${fromNs}.`.length);
-        const afterNs = toIdName ? [toIdName, remain].join(".") : remain;
-        path.replace(nsToNode(afterNs));
-      }
-
-      return;
+    if (nodeNs !== renameNodeNs) {
+      path.replace(nsToNode(renameNodeNs));
     }
   });
   return root.toSource();

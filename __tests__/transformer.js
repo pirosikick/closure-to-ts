@@ -15,3 +15,4 @@ defineTest(
 defineTest(__dirname, "transformer", null, "jsdoc-to-ts");
 defineTest(__dirname, "transformer", null, "goog-provide-and-require");
 defineTest(__dirname, "transformer", null, "constructor");
+defineTest(__dirname, "transformer", null, "interface");

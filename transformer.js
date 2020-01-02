@@ -21,7 +21,7 @@ const rename = require("./lib/rename");
  */
 module.exports = function transformer(fileInfo, _, options) {
   const root = j(fileInfo.source);
-  const provideNamespaces = [];
+  const provideNsList = [];
 
   let dependencies;
   let closurePath;
@@ -31,8 +31,20 @@ module.exports = function transformer(fileInfo, _, options) {
     closurePath = options.closurePath || path_.dirname(options.depsPath);
   }
 
+  /**
+   * @type {Map.<string, string>}
+   */
   const renameMap = new Map();
+
+  /**
+   * @type {Map.<string, any>}
+   */
   const classMap = new Map();
+
+  /**
+   * @type {Map.<string, any>}
+   */
+  const interfaceMap = new Map();
 
   // goog.provide
   root
@@ -58,13 +70,11 @@ module.exports = function transformer(fileInfo, _, options) {
         renameMap.set(provideNs, "");
       }
 
-      provideNamespaces.push(provideNs);
+      provideNsList.push(provideNs);
       path.replace(
         j.commentLine(` goog.provide("${provideNs}")`, false, false)
       );
     });
-
-  const provideNs = provideNamespaces[0];
 
   // goog.require
   root
@@ -83,7 +93,8 @@ module.exports = function transformer(fileInfo, _, options) {
       const lastChunk = ns.split(".").pop();
 
       const from = j.stringLiteral(
-        importPath(dependencies, provideNs, ns, closurePath) || `FIXME/${ns}`
+        importPath(dependencies, provideNsList[0], ns, closurePath) ||
+          `FIXME/${ns}`
       );
 
       let specifiers;
@@ -101,149 +112,182 @@ module.exports = function transformer(fileInfo, _, options) {
       path.parentPath.replace(j.importDeclaration(specifiers, from));
     });
 
-  root.find(j.Comment).forEach(path => {
+  const declarationMap = new Map();
+
+  root.find(j.ExpressionStatement).forEach(path => {
     if (
       !(
-        j.CommentBlock.check(path.value) &&
-        path.value.leading &&
-        // ensure top-level NodePath
-        j.ExpressionStatement.check(path.node) &&
-        j.Program.check(path.parent.node)
+        j.Program.check(path.parent.node) &&
+        (j.AssignmentExpression.check(path.node.expression) ||
+          j.MemberExpression.check(path.node.expression))
       )
     ) {
       return;
     }
 
-    const comment = path.value;
-    const expressionStatement = path.node;
-    const node = expressionStatement.expression;
+    const esNode = path.node;
+    const node = path.node.expression;
 
-    if (!j.AssignmentExpression.check(node)) {
+    const leftNs = j.MemberExpression.check(node)
+      ? nodeToNs(node)
+      : nodeToNs(node.left);
+    const idName = leftNs.split(".").pop();
+    const id = j.identifier(idName);
+    if (
+      !provideNsList.filter(n => leftNs === n || leftNs.indexOf(`${n}.`) === 0)
+        .length
+    ) {
       return;
     }
 
-    let parsed;
-    try {
-      parsed = parseComment(comment.value, renameMap);
-    } catch (e) {
-      console.error(comment.value);
-      return;
+    const comments = esNode.leadingComments;
+
+    let comment;
+    let parsedComment;
+    if (
+      esNode.leadingComments &&
+      esNode.leadingComments.length > 0 &&
+      j.CommentBlock.check(esNode.leadingComments[comments.length - 1])
+    ) {
+      comment = esNode.leadingComments[comments.length - 1];
+
+      try {
+        parsedComment = parseComment(comment.value, renameMap);
+      } catch (e) {
+        console.warn("parseComment failed:", e);
+      }
     }
 
-    const { left, right } = node;
+    if (parsedComment) {
+      if (parsedComment.interface) {
+        const declaration = j.tsInterfaceDeclaration(id, j.tsInterfaceBody([]));
+        const enDeclaration = j.exportNamedDeclaration(declaration);
+        enDeclaration.comments = [j.commentBlock(comment.value, true)];
 
-    // x.x.x = function (...) { ... }
-    if (j.FunctionExpression.check(right)) {
-      if (parsed.constructor) {
-        const classDeclaration = constructorToClass(right, parsed, renameMap);
-        classDeclaration.leadingComments = [
-          j.commentBlock(comment.value, true)
-        ];
+        path.replace(enDeclaration);
 
-        if (!classDeclaration.id) {
-          if (
-            j.MemberExpression.check(left) &&
-            j.Identifier.check(left.property)
-          ) {
-            classDeclaration.id = left.property;
-          } else if (j.Identifier(left)) {
-            classDeclaration.id = left;
+        declarationMap.set(leftNs, declaration);
+        return;
+      }
+
+      if (parsedComment.constructor && j.FunctionExpression.check(node.right)) {
+        const declaration = constructorToClass(
+          node.right,
+          parsedComment,
+          renameMap
+        );
+        declaration.id = declaration.id || id;
+        const enDeclaration = j.exportNamedDeclaration(declaration);
+        enDeclaration.comments = [j.commentBlock(comment.value, true)];
+
+        path.replace(enDeclaration);
+
+        declarationMap.set(leftNs, declaration);
+        renameMap.set(leftNs, idName);
+        return;
+      }
+
+      if (parsedComment.params.length || parsedComment.return) {
+        if (j.FunctionExpression.check(node.right)) {
+          addTypeAnnotationToFunctionExpression(node.right, parsedComment);
+        } else if (j.ConditionalExpression.check(node.right)) {
+          // x.x.x = (...) ? function (...) { ... } : function (...) { ... }
+          if (j.FunctionExpression.check(node.right.consequent)) {
+            addTypeAnnotationToFunctionExpression(
+              node.right.consequent,
+              parsedComment
+            );
+          }
+          if (j.FunctionExpression.check(node.right.alternate)) {
+            addTypeAnnotationToFunctionExpression(
+              node.right.alternate,
+              parsedComment
+            );
           }
         }
-
-        node.right = classDeclaration;
-        classMap.set(nodeToNs(node.left), classDeclaration);
-        renameMap.set(nodeToNs(node.left), classDeclaration.id.name);
-        return;
       }
 
-      addTypeAnnotationToFunctionExpression(right, parsed);
-      return;
-    }
-
-    // x.x.x = (...) ? function (...) { ... } : function (...) { ... }
-    if (j.ConditionalExpression.check(right)) {
-      if (j.FunctionExpression.check(right.consequent)) {
-        addTypeAnnotationToFunctionExpression(right.consequent, parsed);
-      }
-      if (j.FunctionExpression.check(right.alternate)) {
-        addTypeAnnotationToFunctionExpression(right.alternate, parsed);
-      }
-
-      return;
-    }
-  });
-
-  root.find(j.AssignmentExpression).forEach(path => {
-    // ensure that path.node is defined at top-level scope
-    if (!isTopLevelAssignmentExpression(path)) {
-      return;
-    }
-
-    const { node } = path;
-
-    // x.x.x = ...
-    if (j.MemberExpression.check(node.left)) {
-      const ns = nodeToNs(node.left);
-      if (!ns) {
-        return;
-      }
-
-      const classEntry = findMap(
-        classMap,
-        ([classNs]) => ns.indexOf(classNs) === 0 && ns !== classNs
+      const declarationEntry = findMap(
+        declarationMap,
+        ([key]) => leftNs.indexOf(`${key}.`) === 0
       );
-      if (classEntry) {
-        const [classNs, classDeclaration] = classEntry;
-        const chunks = ns.slice(classNs.length + 1).split(".");
-
-        if (!(chunks.length === 1 || chunks.length === 2)) {
-          return;
-        }
-
+      if (declarationEntry) {
+        const [declarationNs, declaration] = declarationEntry;
+        const remainNs = leftNs.slice(`${declarationNs}.`.length);
+        const chunks = remainNs.split(".");
         const key = j.identifier(chunks[chunks.length - 1]);
-        let item;
-        if (j.FunctionExpression.check(node.right)) {
-          item = j.classMethod(
-            "method",
-            key,
-            node.right.params,
-            node.right.body
-          );
-          item.returnType = node.right.returnType;
-        } else {
-          item = j.classProperty(key, node.right);
+
+        if (
+          j.TSInterfaceDeclaration.check(declaration) &&
+          chunks.length === 2
+        ) {
+          let item;
+          if (parsedComment.type) {
+            item = j.tsPropertySignature(key);
+            item.typeAnnotation = parsedComment.type;
+          } else if (parsedComment.return || parsedComment.params.length) {
+            const params = parsedComment.params.map(param => {
+              const paramId = j.identifier(param.name);
+              if (param.rest) {
+                const restElement = j.restElement(paramId);
+                restElement.typeAnnotation = param.annotation;
+                return restElement;
+              }
+              paramId.typeAnnotation = param.annotation;
+              paramId.optional = param.optional;
+              return paramId;
+            });
+            // TODO j.tsMethodSignature throws unexpected error
+            // item = j.tsMethodSignature(key, params, parsedComment.return);
+            item = {
+              type: "TSMethodSignature",
+              key,
+              parameters: params,
+              typeAnnotation: parsedComment.return
+            };
+          }
+
+          item.comments = [j.commentBlock(comment.value, true)];
+          declaration.body.body.push(item);
+          path.prune();
+        } else if (
+          j.AssignmentExpression.check(node) &&
+          j.ClassDeclaration.check(declaration) &&
+          (chunks.length === 1 || chunks.length === 2)
+        ) {
+          let item;
+          if (j.FunctionExpression.check(node.right)) {
+            item = j.classMethod(
+              "method",
+              key,
+              node.right.params,
+              node.right.body
+            );
+            item.returnType = node.right.returnType;
+          } else {
+            item = j.classProperty(key, node.right);
+          }
+
+          item.static = chunks.length === 1;
+          item.comments = [j.commentBlock(comment.value, true)];
+          declaration.body = j.classBody([...declaration.body.body, item]);
+          path.prune();
         }
 
-        item.static = chunks.length === 1;
-        item.comments = path.parent.node.leadingComments;
-
-        classDeclaration.body = j.classBody([
-          ...classDeclaration.body.body,
-          item
-        ]);
-        path.prune();
-
         return;
       }
+    }
 
-      const matchedNsList = provideNamespaces.filter(n => ns.indexOf(n) === 0);
-      if (matchedNsList.length === 0) {
-        return;
+    if (j.AssignmentExpression.check(node)) {
+      const exportNamedDeclaration = j.exportNamedDeclaration(
+        j.variableDeclaration("const", [j.variableDeclarator(id, node.right)])
+      );
+
+      if (comment) {
+        exportNamedDeclaration.comments = [j.commentBlock(comment.value, true)];
       }
 
-      const newNode = j.ClassDeclaration.check(node.right)
-        ? j.exportNamedDeclaration(node.right)
-        : j.exportNamedDeclaration(
-            j.variableDeclaration("const", [
-              j.variableDeclarator(node.left.property, node.right)
-            ])
-          );
-
-      newNode.comments = path.parentPath.node.comments;
-
-      // Replace ExpressionStatement, which is parent of AssignmentExpression
-      path.parentPath.replace(newNode);
+      path.replace(exportNamedDeclaration);
     }
   });
 
@@ -261,15 +305,6 @@ module.exports = function transformer(fileInfo, _, options) {
     }
   });
   return root.toSource();
-};
-
-const isTopLevelAssignmentExpression = path => {
-  return (
-    j.AssignmentExpression.check(path.node) &&
-    path.parentPath && // ExpressionStatement
-    path.parentPath.parentPath && // Program
-    j.Program.check(path.parentPath.parentPath.node)
-  );
 };
 
 const addTypeAnnotationToFunctionExpression = (functionExpression, parsed) => {

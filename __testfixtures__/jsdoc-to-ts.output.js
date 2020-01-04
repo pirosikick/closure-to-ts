@@ -1,5 +1,7 @@
 // goog.provide("goog.string.internal");
 
+import { SafeHtml } from "FIXME/goog.html.SafeHtml";
+
 /**
  * Fast prefix-checker.
  * @param {string} str The string to check.
@@ -57,3 +59,26 @@ export const repeat = (String.prototype.repeat) ? function(string: string, lengt
 } : function(string: string, length: number): string {
   return new Array(length + 1).join(string);
 };
+
+/**
+ * Takes a string of plain text and linkifies URLs and email addresses. For a
+ * URL (unless opt_attributes is specified), the target of the link will be
+ * _blank and it will have a rel=nofollow attribute applied to it so that links
+ * created by linkify will not be of interest to search engines.
+ * @param {string} text Plain text.
+ * @param {!Object<string, ?goog.html.SafeHtml.AttributeValue>=} opt_attributes
+ *     Attributes to add to all links created. Default are rel=nofollow and
+ *     target=_blank. To clear those default attributes set rel='' and
+ *     target=''.
+ * @param {boolean=} opt_preserveNewlines Whether to preserve newlines with
+ *     &lt;br&gt;.
+ * @return {!goog.html.SafeHtml} Linkified HTML. Any text that is not part of a
+ *      link will be HTML-escaped.
+ */
+export const linkifyPlainTextAsHtml = function(
+ text: string,
+ opt_attributes?: {
+  [key: string]: SafeHtml.AttributeValue | null
+ },
+ opt_preserveNewlines?: boolean
+): SafeHtml {};

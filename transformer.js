@@ -279,8 +279,16 @@ module.exports = function transformer(fileInfo, _, options) {
     }
 
     if (j.AssignmentExpression.check(node)) {
+      const kind =
+        !parsedComment ||
+        parsedComment.const ||
+        // node.right is Function
+        parsedComment.return ||
+        !!parsedComment.params.length
+          ? "const"
+          : "let";
       const exportNamedDeclaration = j.exportNamedDeclaration(
-        j.variableDeclaration("const", [j.variableDeclarator(id, node.right)])
+        j.variableDeclaration(kind, [j.variableDeclarator(id, node.right)])
       );
 
       if (comment) {

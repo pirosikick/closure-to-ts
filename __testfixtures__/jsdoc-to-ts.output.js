@@ -82,3 +82,10 @@ export const linkifyPlainTextAsHtml = function(
  },
  opt_preserveNewlines?: boolean
 ): SafeHtml {};
+
+/**
+ * The most recent unique ID. |0 is equivalent to Math.floor in this case.
+ * @type {number}
+ * @private
+ */
+export let uniqueStringCounter_ = Math.random() * 0x80000000 | 0;

@@ -77,3 +77,10 @@ goog.string.internal.repeat = (String.prototype.repeat) ? function(string, lengt
  */
 goog.string.internal.linkifyPlainTextAsHtml = function(
   text, opt_attributes, opt_preserveNewlines) {}
+
+/**
+ * The most recent unique ID. |0 is equivalent to Math.floor in this case.
+ * @type {number}
+ * @private
+ */
+goog.string.internal.uniqueStringCounter_ = Math.random() * 0x80000000 | 0;

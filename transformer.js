@@ -66,17 +66,21 @@ module.exports = function transformer(fileInfo, _, options) {
 
   // goog.require
   root
-    .find(j.CallExpression, {
-      callee: {
-        object: { name: "goog" },
-        property: { name: "require" }
-      }
-    })
+    .find(
+      j.CallExpression,
+      node =>
+        j.MemberExpression.check(node.callee) &&
+        node.callee.object.name === "goog" &&
+        (node.callee.property.name === "require" ||
+          node.callee.property.name === "forwardDeclare")
+    )
     .forEach(path => {
       const [arg0] = path.node.arguments;
       if (!(arg0 && typeof arg0.value === "string")) {
         return;
       }
+      const forwardDeclare =
+        path.node.callee.property.name === "forwardDeclare";
       const ns = arg0.value;
       const lastChunk = ns.split(".").pop();
 
@@ -86,7 +90,7 @@ module.exports = function transformer(fileInfo, _, options) {
       );
 
       let specifiers;
-      if (/^[A-Z]/.test(lastChunk)) {
+      if (forwardDeclare || /^[A-Z]/.test(lastChunk)) {
         // goog.require('a.b.SomeClass') => import { SomeClass } from 'xxx';
         specifiers = [j.importSpecifier(j.identifier(lastChunk))];
         renameMap.set(ns, lastChunk);

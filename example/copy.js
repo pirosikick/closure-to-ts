@@ -12,7 +12,7 @@ const GOOG_PATH = path.join(
   __dirname,
   "node_modules/google-closure-library/closure/goog"
 );
-const targets = ["base.js", "string/*"];
+const targets = ["base.js", "string/*", "dom/*", "html/*"];
 
 const paths = globby.sync(targets.map(target => path.join(GOOG_PATH, target)));
 

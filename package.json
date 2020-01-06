@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "lint": "eslint transformer.js __tests__ lib",
+    "lint-fix": "eslint --fix transformer.js __tests__ lib",
+    "format": "prettier --write \"{lib,__tests__}/**/*.js\" transformer.js"
   },
   "repository": {
     "type": "git",
@@ -20,11 +23,30 @@
   "devDependencies": {
     "@types/jest": "^24.0.23",
     "@types/jscodeshift": "^0.6.3",
+    "eslint": "^6.8.0",
+    "husky": "^3.1.0",
     "jest": "^24.9.0",
-    "jscodeshift": "^0.6.4"
+    "lint-staged": "^9.5.0",
+    "prettier": "^1.19.1"
   },
   "dependencies": {
     "doctrine": "^3.0.0",
-    "google-closure-deps": "^20191111.0.0"
+    "google-closure-deps": "^20191111.0.0",
+    "jscodeshift": "^0.7.0"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.{js,css,json,md}": [
+      "prettier --write",
+      "git add"
+    ],
+    "*.js": [
+      "eslint --fix",
+      "git add"
+    ]
   }
 }

@@ -3,11 +3,9 @@ module.exports = "typescript";
 const path_ = require("path");
 const j = require("jscodeshift");
 const nodeToNs = require("./lib/nodeToNs");
-const getLongest = require("./lib/getLongest");
 const loadDeps = require("./lib/loadDeps");
 const nsToCamel = require("./lib/nsToCamel");
 const nsToNode = require("./lib/nsToNode");
-const findDep = require("./lib/findDep");
 const importPath = require("./lib/importPath");
 const parseComment = require("./lib/parseComment");
 const addTypeAnnotationToParams = require("./lib/addTypeAnnotationToParams");
@@ -35,16 +33,6 @@ module.exports = function transformer(fileInfo, _, options) {
    * @type {Map.<string, string>}
    */
   const renameMap = new Map();
-
-  /**
-   * @type {Map.<string, any>}
-   */
-  const classMap = new Map();
-
-  /**
-   * @type {Map.<string, any>}
-   */
-  const interfaceMap = new Map();
 
   // goog.provide
   root

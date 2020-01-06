@@ -8,7 +8,6 @@ const nsToCamel = require("./lib/nsToCamel");
 const nsToNode = require("./lib/nsToNode");
 const importPath = require("./lib/importPath");
 const parseComment = require("./lib/parseComment");
-const addTypeAnnotationToParams = require("./lib/addTypeAnnotationToParams");
 const constructorToClass = require("./lib/constructorToClass");
 const rename = require("./lib/rename");
 
@@ -64,7 +63,7 @@ module.exports = function transformer(fileInfo, _, options) {
       );
     });
 
-  // goog.require
+  // goog.require & goog.forwardDeclare
   root
     .find(
       j.CallExpression,
@@ -218,23 +217,12 @@ module.exports = function transformer(fileInfo, _, options) {
             item = j.tsPropertySignature(key);
             item.typeAnnotation = parsedComment.type;
           } else if (parsedComment.return || parsedComment.params.length) {
-            const params = parsedComment.params.map(param => {
-              const paramId = j.identifier(param.name);
-              if (param.rest) {
-                const restElement = j.restElement(paramId);
-                restElement.typeAnnotation = param.annotation;
-                return restElement;
-              }
-              paramId.typeAnnotation = param.annotation;
-              paramId.optional = param.optional;
-              return paramId;
-            });
             // TODO j.tsMethodSignature throws unexpected error
             // item = j.tsMethodSignature(key, params, parsedComment.return);
             item = {
               type: "TSMethodSignature",
               key,
-              parameters: params,
+              parameters: parsedComment.params,
               typeAnnotation: parsedComment.return
             };
           }
@@ -256,6 +244,14 @@ module.exports = function transformer(fileInfo, _, options) {
               node.right.body
             );
             item.returnType = node.right.returnType;
+          } else if (nodeToNs(node.right) === "goog.abstractMethod") {
+            item = j.tsDeclareMethod(
+              key,
+              parsedComment.params,
+              parsedComment.return || null
+            );
+            item.abstract = true;
+            declaration.abstract = true;
           } else {
             item = j.classProperty(key, node.right);
           }
@@ -314,10 +310,16 @@ const addTypeAnnotationToFunctionExpression = (functionExpression, parsed) => {
     functionExpression.returnType = parsed.return;
   }
 
-  functionExpression.params = addTypeAnnotationToParams(
-    functionExpression.params,
-    parsed
-  );
+  const newParams = functionExpression.params.map(param => {
+    const p = parsed.params.find(p =>
+      j.RestElement.check(p)
+        ? param.name === p.argument.name
+        : param.name === p.name
+    );
+    return p || param;
+  });
+
+  functionExpression.params = newParams;
 };
 
 const findMap = (map, callback) => {

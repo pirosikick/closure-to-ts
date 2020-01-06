@@ -282,6 +282,8 @@ module.exports = function transformer(fileInfo, _, options) {
       const kind =
         !parsedComment ||
         parsedComment.const ||
+        parsedComment.enum ||
+        parsedComment.define ||
         // node.right is Function
         parsedComment.return ||
         !!parsedComment.params.length

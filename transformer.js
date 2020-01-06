@@ -106,18 +106,28 @@ module.exports = function transformer(fileInfo, _, options) {
   const declarationMap = new Map();
 
   root.find(j.ExpressionStatement).forEach(path => {
-    if (
-      !(
-        j.Program.check(path.parent.node) &&
-        (j.AssignmentExpression.check(path.node.expression) ||
-          j.MemberExpression.check(path.node.expression))
-      )
-    ) {
+    if (!j.Program.check(path.parent.node)) {
       return;
     }
 
     const esNode = path.node;
     const node = path.node.expression;
+
+    // goog.inherits(...)
+    if (
+      j.CallExpression.check(node) &&
+      j.MemberExpression.check(node.callee) &&
+      nodeToNs(node.callee) === "goog.inherits"
+    ) {
+      path.prune();
+      return;
+    }
+
+    if (
+      !(j.AssignmentExpression.check(node) || j.MemberExpression.check(node))
+    ) {
+      return;
+    }
 
     const leftNs = j.MemberExpression.check(node)
       ? nodeToNs(node)
@@ -163,6 +173,7 @@ module.exports = function transformer(fileInfo, _, options) {
 
       if (parsedComment.constructor && j.FunctionExpression.check(node.right)) {
         const declaration = constructorToClass(
+          nodeToNs(node.left),
           node.right,
           parsedComment,
           renameMap
@@ -244,6 +255,25 @@ module.exports = function transformer(fileInfo, _, options) {
               node.right.body
             );
             item.returnType = node.right.returnType;
+
+            j(item)
+              .find(j.CallExpression)
+              .forEach(path => {
+                const { callee, arguments: args } = path.node;
+                if (
+                  nodeToNs(callee) === `${declarationNs}.base` &&
+                  args.length >= 2
+                ) {
+                  // SomeClass.base(this, 'methodName', ...) => super.methodName(...);
+                  const methodName = args[1].value;
+                  const newArgs = args.slice(2);
+                  const newCallee =
+                    methodName === "constructor"
+                      ? j.super()
+                      : j.memberExpression(j.super(), j.identifier(methodName));
+                  path.replace(j.callExpression(newCallee, newArgs));
+                }
+              });
           } else if (nodeToNs(node.right) === "goog.abstractMethod") {
             item = j.tsDeclareMethod(
               key,

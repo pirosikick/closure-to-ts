@@ -322,19 +322,31 @@ module.exports = function transformer(fileInfo, _, options) {
         : "let";
 
     if (j.MemberExpression.check(node)) {
-      const variableDeclaration = j.variableDeclaration(kind, [
-        j.variableDeclarator(id)
-      ]);
-      const privateFlag = parsedComment ? parsedComment.private : true;
-      const declaration = privateFlag
-        ? variableDeclaration
-        : j.exportNamedDeclaration(variableDeclaration);
+      let declaration;
+      if (parsedComment && parsedComment.typedef) {
+        const typeAliasDeclaration = j.tsTypeAliasDeclaration(
+          id,
+          parsedComment.typedef
+        );
+        declaration = parsedComment.private
+          ? typeAliasDeclaration
+          : j.exportNamedDeclaration(typeAliasDeclaration);
+      } else {
+        const variableDeclaration = j.variableDeclaration(kind, [
+          j.variableDeclarator(id)
+        ]);
+        const privateFlag = parsedComment ? parsedComment.private : true;
+        declaration = privateFlag
+          ? variableDeclaration
+          : j.exportNamedDeclaration(variableDeclaration);
+
+        if (parsedComment.type) {
+          id.typeAnnotation = parsedComment.type;
+        }
+      }
 
       if (comment) {
         declaration.comments = [j.commentBlock(comment.value, true)];
-      }
-      if (parsedComment.type) {
-        id.typeAnnotation = parsedComment.type;
       }
 
       path.replace(declaration);

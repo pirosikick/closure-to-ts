@@ -24,3 +24,4 @@ defineTest(
   null,
   "define-variable-without-assignment"
 );
+defineTest(__dirname, "transformer", null, "typedef");

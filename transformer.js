@@ -211,8 +211,9 @@ module.exports = function transformer(fileInfo, _, options) {
 
       if (parsedComment.templates.length) {
         if (j.FunctionExpression.check(node.right)) {
-          const params = parsedComment.templates.map(t => j.tsTypeParameter(t));
-          node.right.typeParameters = j.tsTypeParameterDeclaration(params);
+          node.right.typeParameters = j.tsTypeParameterDeclaration(
+            parsedComment.templates
+          );
         }
       }
 
@@ -264,10 +265,9 @@ module.exports = function transformer(fileInfo, _, options) {
             item.returnType = node.right.returnType;
 
             if (parsedComment.templates.length) {
-              const params = parsedComment.templates.map(t =>
-                j.tsTypeParameter(t)
+              item.typeParameters = j.tsTypeParameterDeclaration(
+                parsedComment.templates
               );
-              item.typeParameters = j.tsTypeParameterDeclaration(params);
             }
 
             j(item)

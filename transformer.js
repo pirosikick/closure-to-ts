@@ -310,17 +310,35 @@ module.exports = function transformer(fileInfo, _, options) {
       }
     }
 
-    if (j.AssignmentExpression.check(node)) {
-      const kind =
-        !parsedComment ||
-        parsedComment.const ||
-        parsedComment.enum ||
-        parsedComment.define ||
-        // node.right is Function
-        parsedComment.return ||
-        !!parsedComment.params.length
-          ? "const"
-          : "let";
+    const kind =
+      !parsedComment ||
+      parsedComment.const ||
+      parsedComment.enum ||
+      parsedComment.define ||
+      // node.right is Function
+      parsedComment.return ||
+      !!parsedComment.params.length
+        ? "const"
+        : "let";
+
+    if (j.MemberExpression.check(node)) {
+      const variableDeclaration = j.variableDeclaration(kind, [
+        j.variableDeclarator(id)
+      ]);
+      const privateFlag = parsedComment ? parsedComment.private : true;
+      const declaration = privateFlag
+        ? variableDeclaration
+        : j.exportNamedDeclaration(variableDeclaration);
+
+      if (comment) {
+        declaration.comments = [j.commentBlock(comment.value, true)];
+      }
+      if (parsedComment.type) {
+        id.typeAnnotation = parsedComment.type;
+      }
+
+      path.replace(declaration);
+    } else if (j.AssignmentExpression.check(node)) {
       const exportNamedDeclaration = j.exportNamedDeclaration(
         j.variableDeclaration(kind, [j.variableDeclarator(id, node.right)])
       );

@@ -209,6 +209,13 @@ module.exports = function transformer(fileInfo, _, options) {
         }
       }
 
+      if (parsedComment.templates.length) {
+        if (j.FunctionExpression.check(node.right)) {
+          const params = parsedComment.templates.map(t => j.tsTypeParameter(t));
+          node.right.typeParameters = j.tsTypeParameterDeclaration(params);
+        }
+      }
+
       const declarationEntry = findMap(
         declarationMap,
         ([key]) => leftNs.indexOf(`${key}.`) === 0
@@ -255,6 +262,13 @@ module.exports = function transformer(fileInfo, _, options) {
               node.right.body
             );
             item.returnType = node.right.returnType;
+
+            if (parsedComment.templates.length) {
+              const params = parsedComment.templates.map(t =>
+                j.tsTypeParameter(t)
+              );
+              item.typeParameters = j.tsTypeParameterDeclaration(params);
+            }
 
             j(item)
               .find(j.CallExpression)

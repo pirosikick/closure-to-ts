@@ -30,7 +30,7 @@
     "prettier": "^1.19.1"
   },
   "dependencies": {
-    "doctrine": "^3.0.0",
+    "@teppeis/doctrine": "^3.2.0",
     "google-closure-deps": "^20191111.0.0",
     "jscodeshift": "^0.7.0"
   },

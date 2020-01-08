@@ -33,6 +33,16 @@ module.exports = function transformer(fileInfo, _, options) {
    */
   const renameMap = new Map();
 
+  // base.js
+  if (
+    fileInfo.source.indexOf(
+      "@fileoverview Bootstrap for the Google JS Library (Closure)."
+    ) > -1
+  ) {
+    provideNsList.push("goog");
+    renameMap.set("goog", "");
+  }
+
   // goog.provide
   root
     .find(j.CallExpression, {
@@ -340,7 +350,7 @@ module.exports = function transformer(fileInfo, _, options) {
           ? variableDeclaration
           : j.exportNamedDeclaration(variableDeclaration);
 
-        if (parsedComment.type) {
+        if (parsedComment && parsedComment.type) {
           id.typeAnnotation = parsedComment.type;
         }
       }

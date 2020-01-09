@@ -26,3 +26,4 @@ defineTest(
 );
 defineTest(__dirname, "transformer", null, "typedef");
 defineTest(__dirname, "transformer", null, "enum");
+defineTest(__dirname, "transformer", null, "non-nullable-types");

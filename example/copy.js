@@ -14,7 +14,9 @@ const GOOG_PATH = path.join(
 );
 const targets = [
   path.join(GOOG_PATH, "**/*.js"),
-  "!" + path.join(GOOG_PATH, "deps.js")
+  ...["deps.js", "test_module.js", "test_module_dep.js"].map(
+    p => "!" + path.join(GOOG_PATH, p)
+  )
 ];
 
 const paths = globby.sync(targets);

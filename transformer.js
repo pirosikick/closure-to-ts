@@ -12,6 +12,25 @@ const constructorToClass = require("./lib/constructorToClass");
 const rename = require("./lib/rename");
 const typeNameToNode = require("./lib/typeNameToNode");
 
+// TODO generate automatically
+const nonNullableTypes = [
+  // @struct
+  "goog.math.Vec3",
+  "goog.math.Size",
+  "goog.math.Coordinate",
+  "goog.math.Rect",
+  "goog.math.Integer.DivisionResult",
+  "goog.math.Line",
+  "goog.math.Range",
+  "goog.math.Bezier",
+  "goog.math.Box",
+  "goog.math.Matrix",
+  "goog.math.Vec2",
+  "goog.math.Coordinate3",
+  "goog.math.RangeSet",
+  "goog.math.Path"
+];
+
 /**
  *
  * @param {import('jscodeshift').FileInfo} fileInfo
@@ -153,7 +172,7 @@ module.exports = function transformer(fileInfo, _, options) {
       comment = esNode.leadingComments[comments.length - 1];
 
       try {
-        parsedComment = parseComment(comment.value);
+        parsedComment = parseComment(comment.value, nonNullableTypes);
       } catch (e) {
         console.warn("parseComment failed:", e, comment);
       }

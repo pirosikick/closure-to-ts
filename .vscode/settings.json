@@ -1,5 +1,8 @@
 {
-  "files.exclude": {
+  "files.watcherExclude": {
+    "example/src/**": true
+  },
+  "search.exclude": {
     "example/src/**": true
   }
 }

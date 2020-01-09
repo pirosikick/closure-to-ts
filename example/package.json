@@ -1,7 +1,7 @@
 {
   "scripts": {
     "copy": "node copy.js",
-    "transform": "jscodeshift --extensions=ts -t ../transformer.js src/*/*.ts --depsPath=node_modules/google-closure-library/closure/goog/deps.js",
+    "transform": "jscodeshift --extensions=ts -t ../transformer.js src/**/*.ts --depsPath=node_modules/google-closure-library/closure/goog/deps.js",
     "transform:dry": "jscodeshift -p -d --extensions=ts -t ../transformer.js src/*/*.ts --depsPath=node_modules/google-closure-library/closure/goog/deps.js"
   },
   "private": true,

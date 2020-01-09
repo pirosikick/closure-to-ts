@@ -1,6 +1,7 @@
 goog.provide('a.b.SomeClass');
 
 goog.require('a.b.SuperClass');
+goog.require('a.b.SomeInterface');
 
 /**
  * The description
@@ -9,6 +10,7 @@ goog.require('a.b.SuperClass');
  * @param {string} a
  * @param {string} b
  * @extends {a.b.SuperClass}
+ * @implements {a.b.SomeInterface}
  */
 a.b.SomeClass = function (a, b) {
   a.b.SomeClass.base(this, 'constructor', a, b);

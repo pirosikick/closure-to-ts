@@ -10,6 +10,7 @@ const importPath = require("./lib/importPath");
 const parseComment = require("./lib/parseComment");
 const constructorToClass = require("./lib/constructorToClass");
 const rename = require("./lib/rename");
+const typeNameToNode = require("./lib/typeNameToNode");
 
 /**
  *
@@ -40,7 +41,6 @@ module.exports = function transformer(fileInfo, _, options) {
     ) > -1
   ) {
     provideNsList.push("goog");
-    renameMap.set("goog", "");
   }
 
   // goog.provide
@@ -57,16 +57,6 @@ module.exports = function transformer(fileInfo, _, options) {
         return;
       }
       const provideNs = arg0.value;
-      const lastChunk = provideNs.split(".").pop();
-
-      if (/^[A-Z]/.test(lastChunk)) {
-        // goog.provide('a.b.c.SomeClass')
-        renameMap.set(provideNs, lastChunk);
-      } else {
-        // goog.provide('a.b.c')
-        renameMap.set(provideNs, "");
-      }
-
       provideNsList.push(provideNs);
       path.replace(
         j.commentLine(` goog.provide("${provideNs}")`, false, false)
@@ -163,7 +153,7 @@ module.exports = function transformer(fileInfo, _, options) {
       comment = esNode.leadingComments[comments.length - 1];
 
       try {
-        parsedComment = parseComment(comment.value, renameMap);
+        parsedComment = parseComment(comment.value);
       } catch (e) {
         console.warn("parseComment failed:", e, comment);
       }
@@ -178,6 +168,7 @@ module.exports = function transformer(fileInfo, _, options) {
         path.replace(enDeclaration);
 
         declarationMap.set(leftNs, declaration);
+        renameMap.set(leftNs, idName);
         return;
       }
 
@@ -216,14 +207,6 @@ module.exports = function transformer(fileInfo, _, options) {
               parsedComment
             );
           }
-        }
-      }
-
-      if (parsedComment.templates.length) {
-        if (j.FunctionExpression.check(node.right)) {
-          node.right.typeParameters = j.tsTypeParameterDeclaration(
-            parsedComment.templates
-          );
         }
       }
 
@@ -359,6 +342,7 @@ module.exports = function transformer(fileInfo, _, options) {
         declaration.comments = [j.commentBlock(comment.value, true)];
       }
 
+      renameMap.set(leftNs, idName);
       path.replace(declaration);
     } else if (j.AssignmentExpression.check(node)) {
       const variableDeclarator = j.variableDeclarator(id, node.right);
@@ -383,6 +367,7 @@ module.exports = function transformer(fileInfo, _, options) {
         exportNamedDeclaration.comments = [j.commentBlock(comment.value, true)];
       }
 
+      renameMap.set(leftNs, idName);
       path.replace(exportNamedDeclaration);
     }
   });
@@ -400,16 +385,32 @@ module.exports = function transformer(fileInfo, _, options) {
       path.replace(nsToNode(renameNodeNs));
     }
   });
+
+  root.find(j.TSQualifiedName).forEach(path => {
+    if (j.TSQualifiedName.check(path.parent.node)) {
+      return;
+    }
+
+    const typeName = nodeToNs(path.node);
+    const renamedTypeName = rename(renameMap, typeName);
+
+    if (typeName !== renamedTypeName) {
+      path.replace(typeNameToNode(renamedTypeName));
+    }
+  });
   return root.toSource();
 };
 
-const addTypeAnnotationToFunctionExpression = (functionExpression, parsed) => {
-  if (parsed.return) {
-    functionExpression.returnType = parsed.return;
+const addTypeAnnotationToFunctionExpression = (
+  functionExpression,
+  parsedComment
+) => {
+  if (parsedComment.return) {
+    functionExpression.returnType = parsedComment.return;
   }
 
   const newParams = functionExpression.params.map(param => {
-    const p = parsed.params.find(p =>
+    const p = parsedComment.params.find(p =>
       j.RestElement.check(p)
         ? param.name === p.argument.name
         : param.name === p.name
@@ -418,6 +419,12 @@ const addTypeAnnotationToFunctionExpression = (functionExpression, parsed) => {
   });
 
   functionExpression.params = newParams;
+
+  if (parsedComment.templates.length) {
+    functionExpression.typeParameters = j.tsTypeParameterDeclaration(
+      parsedComment.templates
+    );
+  }
 };
 
 const findMap = (map, callback) => {

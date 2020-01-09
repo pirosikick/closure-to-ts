@@ -12,9 +12,12 @@ const GOOG_PATH = path.join(
   __dirname,
   "node_modules/google-closure-library/closure/goog"
 );
-const targets = ["base.js", "string/*", "dom/*", "html/*"];
+const targets = [
+  path.join(GOOG_PATH, "**/*.js"),
+  "!" + path.join(GOOG_PATH, "deps.js")
+];
 
-const paths = globby.sync(targets.map(target => path.join(GOOG_PATH, target)));
+const paths = globby.sync(targets);
 
 paths.forEach(p => {
   const relativePath = extToTS(path.relative(GOOG_PATH, p));

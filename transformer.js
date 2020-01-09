@@ -165,7 +165,7 @@ module.exports = function transformer(fileInfo, _, options) {
       try {
         parsedComment = parseComment(comment.value, renameMap);
       } catch (e) {
-        console.warn("parseComment failed:", e);
+        console.warn("parseComment failed:", e, comment);
       }
     }
 

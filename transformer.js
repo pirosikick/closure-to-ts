@@ -38,7 +38,11 @@ const nonNullableTypes = [
  */
 module.exports = function transformer(fileInfo, _, options) {
   const root = j(fileInfo.source);
-  const provideNsList = [];
+
+  // see: https://github.com/facebook/jscodeshift/blob/master/recipes/retain-first-comment.md
+  const getFirstNode = () => root.find(j.Program).get("body", 0).node;
+  const firstNode = getFirstNode();
+  const { comments: firstNodeComments } = firstNode;
 
   let dependencies;
   let closurePath;
@@ -49,17 +53,29 @@ module.exports = function transformer(fileInfo, _, options) {
   }
 
   /**
-   * @type {Map.<string, string>}
+   * @type {Array<string>}
+   */
+  const provideNsList = [];
+
+  /**
+   * @type {Map<string, string>}
    */
   const renameMap = new Map();
 
+  /**
+   * @type {Map<string, any>}
+   */
+  const declarationMap = new Map();
+
   // base.js
+  let googBase = false;
   if (
     fileInfo.source.indexOf(
       "@fileoverview Bootstrap for the Google JS Library (Closure)."
     ) > -1
   ) {
     provideNsList.push("goog");
+    googBase = true;
   }
 
   // goog.provide
@@ -122,7 +138,48 @@ module.exports = function transformer(fileInfo, _, options) {
       path.parentPath.replace(j.importDeclaration(specifiers, from));
     });
 
-  const declarationMap = new Map();
+  if (options.insertGoog && !googBase) {
+    let googImported = false;
+    root
+      .find(j.MemberExpression, {
+        object: {
+          name: "goog"
+        }
+      })
+      .forEach(path => {
+        if (
+          googImported ||
+          j.MemberExpression.check(path.parent.node) ||
+          !j.Identifier.check(path.node.property)
+        ) {
+          return;
+        }
+
+        if (!["inherits", "abstractMethod"].includes(path.node.property.name)) {
+          const from = j.stringLiteral(
+            importPath(dependencies, provideNsList[0], "goog", closurePath) ||
+              `FIXME/goog`
+          );
+          const importDecl = j.importDeclaration(
+            [j.importNamespaceSpecifier(j.identifier("goog"))],
+            from
+          );
+
+          // needs to import base.ts
+          const imports = root.find(j.ImportDeclaration);
+          if (imports.length) {
+            imports.get().insertBefore(importDecl);
+          } else {
+            root
+              .find(j.Program)
+              .get("body")
+              .unshift(importDecl);
+          }
+
+          googImported = true;
+        }
+      });
+  }
 
   root.find(j.ExpressionStatement).forEach(path => {
     if (!j.Program.check(path.parent.node)) {
@@ -417,6 +474,13 @@ module.exports = function transformer(fileInfo, _, options) {
       path.replace(typeNameToNode(renamedTypeName));
     }
   });
+
+  // see: https://github.com/facebook/jscodeshift/blob/master/recipes/retain-first-comment.md
+  const firstNode2 = getFirstNode();
+  if (firstNode2 !== firstNode) {
+    firstNode2.comments = firstNodeComments;
+  }
+
   return root.toSource();
 };
 

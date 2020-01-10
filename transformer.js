@@ -422,17 +422,23 @@ module.exports = function transformer(fileInfo, _, options) {
       path.replace(declaration);
     } else if (j.AssignmentExpression.check(node)) {
       const variableDeclarator = j.variableDeclarator(id, node.right);
-      if (parsedComment && parsedComment.enum) {
-        // as const
-        variableDeclarator.init = j.tsAsExpression(
-          variableDeclarator.init,
-          j.tsTypeReference(j.identifier("const"))
-        );
-        path.insertAfter(
-          j.exportNamedDeclaration(
-            j.tsTypeAliasDeclaration(id, parsedComment.enum)
-          )
-        );
+      if (parsedComment) {
+        if (parsedComment.enum) {
+          // as const
+          variableDeclarator.init = j.tsAsExpression(
+            variableDeclarator.init,
+            j.tsTypeReference(j.identifier("const"))
+          );
+          path.insertAfter(
+            j.exportNamedDeclaration(
+              j.tsTypeAliasDeclaration(id, parsedComment.enum)
+            )
+          );
+        }
+
+        if (parsedComment.define && parsedComment.type) {
+          id.typeAnnotation = parsedComment.type;
+        }
       }
 
       const exportNamedDeclaration = j.exportNamedDeclaration(

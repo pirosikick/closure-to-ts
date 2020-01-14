@@ -468,6 +468,7 @@ module.exports = function transformer(fileInfo, _, options) {
     }
   });
 
+  // aaa.bbb.ccc => aaaBbbCcc
   root.find(j.TSQualifiedName).forEach(path => {
     if (j.TSQualifiedName.check(path.parent.node)) {
       return;
@@ -478,6 +479,33 @@ module.exports = function transformer(fileInfo, _, options) {
 
     if (typeName !== renamedTypeName) {
       path.replace(typeNameToNode(renamedTypeName));
+    }
+  });
+
+  root.find(j.ConditionalExpression).forEach(path => {
+    const { node } = path;
+    if (!(node.leadingComments && node.leadingComments.length)) {
+      return;
+    }
+
+    const commentNode = node.leadingComments[node.leadingComments.length - 1];
+
+    let parsedComment;
+    try {
+      parsedComment = parseComment(commentNode.value, nonNullableTypes);
+    } catch (e) {
+      console.error(e, commentNode.value);
+      return;
+    }
+
+    if (parsedComment.type) {
+      const typeAnnotation = parsedComment.type.typeAnnotation;
+      const newNode = j.conditionalExpression(
+        node.test,
+        j.tsAsExpression(node.consequent, typeAnnotation),
+        j.tsAsExpression(node.alternate, typeAnnotation)
+      );
+      path.replace(newNode);
     }
   });
 

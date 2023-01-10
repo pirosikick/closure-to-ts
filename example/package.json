@@ -7,7 +7,7 @@
   "private": true,
   "dependencies": {
     "globby": "^10.0.1",
-    "google-closure-library": "^20191111.0.0",
+    "google-closure-library": "^20221102.0.0",
     "jscodeshift": "^0.7.0",
     "make-dir": "^3.0.0"
   }
